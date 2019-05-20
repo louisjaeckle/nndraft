@@ -1,0 +1,167 @@
+from __future__ import division
+from PIL import Image
+import random
+import math
+
+
+
+
+def sigmoid(value):
+ if value<=-705:
+     return 0
+ else:
+     return 1 / (1 + (math.exp(-value)))
+
+
+#editable stuff
+learning_rate = 1
+n_generations = 10000000
+inputs = [[.1,.2],[.1,.7],[.3,.8],[1,.5],[.2,.7]]
+goal_outputs = [[sigmoid(.3)],[sigmoid(.8)],[sigmoid(1.1)],[sigmoid(1.5)],[sigmoid(.9)]]
+neuron_layers = [2,2,2,2,1]
+momentum_coeficient = .2 
+should be around .9,less than 1
+
+
+
+max_input = abs(inputs[0][0])
+for input_list in inputs:
+ for input in input_list:
+     if abs(input)>max_input:
+         max_input = abs(input)
+for input_list_index in range(len(inputs)):
+ for input_index in range(len(inputs[input_list_index])):
+     inputs[input_list_index][input_index] /=max_input
+max_goal_output = abs(goal_outputs[0][0])
+for goal_output_list in goal_outputs:
+ for goal_output_item in goal_output_list:
+     if abs(goal_output_item)>max_goal_output:
+         max_goal_output = abs(goal_output_item)
+for goal_output_list_index in range(len(goal_outputs)):
+ for goal_output_item_index in range(len(goal_outputs[goal_output_list_index])):
+     goal_outputs[goal_output_list_index][goal_output_item_index]/=max_goal_output
+n_layers = len(neuron_layers)
+weights = []
+for layer in range(0, n_layers - 1):
+ weights.append([])
+ for f_neuron in range(0, neuron_layers[layer + 1]):
+     weights[layer].append([])
+     for neuron in range(0, neuron_layers[layer]):
+         weights[layer][f_neuron].append(random.random()*2-1)
+
+# weights organized by destination neuron first e.g. [[w00,w10],[w01,w11]]
+# weight indexes are indexed from weights headed to the second layer=0
+# weights[initial_weight_layer][destination_neuron_index][inital_neuron_index]
+
+biases = []#indexed as biases[layer-1][neuron]
+for layer in range(n_layers-1):
+  biases.append([])
+  for neuron in range(neuron_layers[layer+1]):
+      biases[-1].append((random.randrange(-100,100)/100)/(neuron_layers[layer]**.5))
+
+def f_propogate(inputs1, layer):  # the layer the inputs come from
+ layer_outputs = []
+ for neuron in range(0, neuron_layers[layer + 1]):
+     activation = 0
+     w_weights = weights[layer][neuron]
+     for input in range(0, len(inputs1)):
+         activation += w_weights[input] * inputs1[input]
+     activation+=biases[layer][neuron]
+     layer_outputs.append(activation)
+ return layer_outputs
+
+
+def deriv_sigmoid(value):
+ return(value*(1-value))
+
+#generates momentums
+momentums = []#indexed [initial weight layer][destination neuron index][initial neuron index]
+bias_momentums = []#indexed [layer-1][neuron index]
+for weights_layer_index in range(len(weights)):
+   momentums.append([])
+   for weights_destination_neuron_index in range(len(weights[weights_layer_index])):
+       momentums[-1].append([])
+       for weights_initial_neuron_index in range(len(weights[weights_layer_index][weights_destination_neuron_index])):
+           momentums[-1][-1].append(0)
+for biases_layer_index in range(len(biases)):
+   bias_momentums.append([])
+   for bias_index in range(len(biases[biases_layer_index])):
+       bias_momentums[-1].append(0)
+
+
+
+
+
+
+# execute
+for gen in range(n_generations):
+ pre_deriv_weights = list(weights)
+ weight_intial = weights[0][0][0]
+ # forward
+ outputs = []  # indexed [output_list_index][output_item_index]
+ z_values = []  # z values index as z_values[output list index][layer-1][neuron]
+ for data in range(len(inputs)):
+     w_data_z_values = []
+     w_layer_z_values = f_propogate(inputs[data], 0)
+     w_data_z_values.append(w_layer_z_values)
+     w_inputs = [sigmoid(i) for i in w_layer_z_values]  # 2nd layer activations = 0
+     for w_layer in range(1, n_layers - 1):
+         w_layer_z_values = f_propogate(w_inputs, w_layer)
+         w_data_z_values.append(w_layer_z_values)
+         w_inputs = [sigmoid(i) for i in w_layer_z_values]
+         if w_layer == n_layers - 2:
+             outputs.append(w_inputs)
+     z_values.append(w_data_z_values)
+ activations = []#indexed as [output list index][layer][neuron]
+ for output_list_index in range(len(z_values)):
+     activations.append([[input_activation for input_activation in inputs[output_list_index]]])
+     for layer_index in range(len(z_values[output_list_index])):
+         activations[-1].append([])
+         for neuron_index in range(len(z_values[output_list_index][layer_index])):
+             activations[-1][-1].append(sigmoid(z_values[output_list_index][layer_index][neuron_index]))
+
+
+ # backprop
+ # creates a list of error signal helper w/ all sum(wjks'(jz)), etc
+ for output_list_index in range(len(outputs)):
+     activation_derivatives = [[]]
+     for l_neuron in range(neuron_layers[-1]):
+         activation_derivatives[-1].append([outputs[output_list_index][l_neuron]-goal_outputs[output_list_index][l_neuron]])
+     for activation_derivative_layer in reversed(range(n_layers-1)):
+         activation_derivatives.append([])
+         for activation_neuron_index in range(neuron_layers[activation_derivative_layer]):
+             activation_specific_derivative_add_list = []
+             for f_activation_derivative_index in range(len(activation_derivatives[-1])):
+                 f_activation_derivative = 0
+                 for f_activation_derivative_add_item in activation_derivatives[-2][f_activation_derivative_index]:
+                     f_activation_derivative+=f_activation_derivative_add_item
+                 act_act_derivative = deriv_sigmoid(activations[output_list_index][activation_derivative_layer+1][f_activation_derivative_index])
+                 activation_specific_derivative_add_list.append(f_activation_derivative*act_act_derivative)
+             activation_derivatives[-1].append(activation_specific_derivative_add_list)
+     activation_derivatives.reverse()#indexed as [layer][activation neuron index][add_item]
+     for derivative_weight_layer in range(n_layers-1):
+         for destination_neuron_index in range(neuron_layers[derivative_weight_layer+1]):
+             destination_neuron_add_list = activation_derivatives[derivative_weight_layer+1][destination_neuron_index]
+             bias_derivative = 0
+             for initial_neuron_index in range(neuron_layers[derivative_weight_layer]):
+                 weight_derivative = 0
+                 for weight_derivative_add_item in destination_neuron_add_list:
+                     weight_derivative+=(weight_derivative_add_item*deriv_sigmoid(activations[output_list_index][derivative_weight_layer+1][destination_neuron_index])*activations[output_list_index][derivative_weight_layer][initial_neuron_index])
+                     #bias stuff
+                     if initial_neuron_index == 0:
+                         bias_derivative+=weight_derivative_add_item*deriv_sigmoid(activations[output_list_index][derivative_weight_layer+1][destination_neuron_index])
+                 #magic
+                 weights[derivative_weight_layer][destination_neuron_index][initial_neuron_index]-=(weight_derivative+(momentums[derivative_weight_layer][destination_neuron_index][initial_neuron_index]*momentum_coeficient))*learning_rate
+                 momentums[derivative_weight_layer][destination_neuron_index][initial_neuron_index] = weight_derivative+(momentums[derivative_weight_layer][destination_neuron_index][initial_neuron_index]*momentum_coeficient)
+             #bias magic
+             biases[derivative_weight_layer][destination_neuron_index]-=(bias_derivative+(bias_momentums[derivative_weight_layer][destination_neuron_index]*momentum_coeficient))*learning_rate
+             bias_momentums[derivative_weight_layer][destination_neuron_index] = bias_derivative+(bias_momentums[derivative_weight_layer][destination_neuron_index]*momentum_coeficient)
+
+ gen_error = 0
+ for output_list_index in range(len(outputs)):
+     for output_list_item_index in range(len(outputs[output_list_index])):
+         gen_error += abs(outputs[output_list_index][output_list_item_index] - goal_outputs[output_list_index][
+             output_list_item_index])
+ print("gen error ISSSS...    %s" % gen_error)
+
+
