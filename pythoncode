@@ -8,22 +8,23 @@ import math
 
 def sigmoid(value):
  if value<=-705:
-     return 0
+     return sigmoid(-704)
  else:
      return 1 / (1 + (math.exp(-value)))
 
+def deriv_sigmoid(value):
+ return(value*(1-value))
 
 #editable stuff
-learning_rate = 1
+learning_rate = 2
 n_generations = 10000000
 inputs = [[.1,.2],[.1,.7],[.3,.8],[1,.5],[.2,.7]]
 goal_outputs = [[sigmoid(.3)],[sigmoid(.8)],[sigmoid(1.1)],[sigmoid(1.5)],[sigmoid(.9)]]
-neuron_layers = [2,2,2,2,1]
-momentum_coeficient = .2 
-should be around .9,less than 1
+neuron_layers = [2,2,2,2,1]#including input and output layers
+momentum_coeficient = 0
 
 
-
+#squishes inputs and goal outputs between -1 and 1
 max_input = abs(inputs[0][0])
 for input_list in inputs:
  for input in input_list:
@@ -41,6 +42,8 @@ for goal_output_list_index in range(len(goal_outputs)):
  for goal_output_item_index in range(len(goal_outputs[goal_output_list_index])):
      goal_outputs[goal_output_list_index][goal_output_item_index]/=max_goal_output
 n_layers = len(neuron_layers)
+
+#initializes weights
 weights = []
 for layer in range(0, n_layers - 1):
  weights.append([])
@@ -48,17 +51,16 @@ for layer in range(0, n_layers - 1):
      weights[layer].append([])
      for neuron in range(0, neuron_layers[layer]):
          weights[layer][f_neuron].append(random.random()*2-1)
+# indexed as weights[initial_weight_layer][destination_neuron_index][inital_neuron_index]
 
-# weights organized by destination neuron first e.g. [[w00,w10],[w01,w11]]
-# weight indexes are indexed from weights headed to the second layer=0
-# weights[initial_weight_layer][destination_neuron_index][inital_neuron_index]
-
+#initializes biases
 biases = []#indexed as biases[layer-1][neuron]
 for layer in range(n_layers-1):
   biases.append([])
   for neuron in range(neuron_layers[layer+1]):
       biases[-1].append((random.randrange(-100,100)/100)/(neuron_layers[layer]**.5))
 
+#propogates between layers
 def f_propogate(inputs1, layer):  # the layer the inputs come from
  layer_outputs = []
  for neuron in range(0, neuron_layers[layer + 1]):
@@ -67,12 +69,9 @@ def f_propogate(inputs1, layer):  # the layer the inputs come from
      for input in range(0, len(inputs1)):
          activation += w_weights[input] * inputs1[input]
      activation+=biases[layer][neuron]
-     layer_outputs.append(activation)
+     layer_outputs.append(sigmoid(activation))
  return layer_outputs
 
-
-def deriv_sigmoid(value):
- return(value*(1-value))
 
 #generates momentums
 momentums = []#indexed [initial weight layer][destination neuron index][initial neuron index]
@@ -95,31 +94,15 @@ for biases_layer_index in range(len(biases)):
 
 # execute
 for gen in range(n_generations):
- pre_deriv_weights = list(weights)
- weight_intial = weights[0][0][0]
+
  # forward
  outputs = []  # indexed [output_list_index][output_item_index]
- z_values = []  # z values index as z_values[output list index][layer-1][neuron]
+ activations = []  # indexed as [output list index][layer][neuron]
  for data in range(len(inputs)):
-     w_data_z_values = []
-     w_layer_z_values = f_propogate(inputs[data], 0)
-     w_data_z_values.append(w_layer_z_values)
-     w_inputs = [sigmoid(i) for i in w_layer_z_values]  # 2nd layer activations = 0
-     for w_layer in range(1, n_layers - 1):
-         w_layer_z_values = f_propogate(w_inputs, w_layer)
-         w_data_z_values.append(w_layer_z_values)
-         w_inputs = [sigmoid(i) for i in w_layer_z_values]
-         if w_layer == n_layers - 2:
-             outputs.append(w_inputs)
-     z_values.append(w_data_z_values)
- activations = []#indexed as [output list index][layer][neuron]
- for output_list_index in range(len(z_values)):
-     activations.append([[input_activation for input_activation in inputs[output_list_index]]])
-     for layer_index in range(len(z_values[output_list_index])):
-         activations[-1].append([])
-         for neuron_index in range(len(z_values[output_list_index][layer_index])):
-             activations[-1][-1].append(sigmoid(z_values[output_list_index][layer_index][neuron_index]))
-
+     activations.append([inputs[data]])
+     for layer in range(n_layers-1):
+         activations[-1].append(f_propogate(activations[-1][-1],layer))
+ outputs = [activations[output_list_index][-1] for output_list_index in range(len(inputs))]
 
  # backprop
  # creates a list of error signal helper w/ all sum(wjks'(jz)), etc
@@ -163,5 +146,3 @@ for gen in range(n_generations):
          gen_error += abs(outputs[output_list_index][output_list_item_index] - goal_outputs[output_list_index][
              output_list_item_index])
  print("gen error ISSSS...    %s" % gen_error)
-
-
